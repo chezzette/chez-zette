@@ -165,12 +165,13 @@ function listFor(k){
  return lines(src).map(n=>({n,p:0}));
 }
 const optList=(o)=>{const l=listFor(o.k);return o.only?l.filter(x=>o.only.includes(x.n)):l};
-const newSel=()=>({sauce:new Set(),garniture:new Set(),supp:new Set(),base:'',viande:'',plat:'',boisson:''});
+const newSel=()=>({label:'',sauce:new Set(),garniture:new Set(),supp:new Set(),base:'',viande:'',plat:'',boisson:''});
 function sheetPrice(){let p=sheet.it.price;const s=listFor('supp');sheet.sel.supp.forEach(n=>{const x=s.find(y=>y.n===n);if(x)p+=x.p});return p}
 function sheetHTML(){
  const {c,it,sel}=sheet;
  const chips=(k,list,multi)=>list.map(x=>`<button class="chip ${(multi?sel[k].has(x.n):sel[k]===x.n)?'on':''}" data-ch="${k}" data-v="${esc(x.n)}">${esc(x.n)}${x.p?' +'+eur(x.p):''}</button>`).join('');
  let h=`<h2>${esc(it.name)}</h2>`;
+ if(c.opts.some(o=>o.k==='viande'))h+=`<h3>Nom du tacos <small>pour les différencier</small></h3><input id="tlabel" maxlength="30" placeholder="Ex : Karim, tacos 1…" value="${esc(sel.label)}">`;
  c.opts.forEach(o=>{
   if(o.k==='enfant'){h+=`<h3>Plat <small>frites incluses</small></h3>${chips('plat',listFor('plat'),0)}<h3>Boisson</h3>${chips('boisson',listFor('boisson'),0)}`;return}
   if(!TITRES[o.k])return;
@@ -255,6 +256,7 @@ function pickItem(ci,ii){
 }
 document.addEventListener('input',e=>{
  if(e.target.id==='cname')cname=e.target.value;
+ if(e.target.id==='tlabel'&&sheet)sheet.sel.label=e.target.value;
  else if(e.target.id==='note')note=e.target.value;
  else if(e.target.id==='q'){q=e.target.value;$('#list').innerHTML=listHTML()}
 });
@@ -283,7 +285,7 @@ document.addEventListener('click',async e=>{
   if(sel.sauce.size)d.push('Sauces : '+[...sel.sauce].join(', '));
   if(sel.supp.size)d.push('Supp : '+[...sel.supp].join(', '));
   if(sel.boisson)d.push(sel.boisson);
-  cart.push({name:it.name,detail:d.join(' · '),price:sheetPrice()});sheet=null;step=null;render();return}
+  const lb=(sel.label||'').trim();cart.push({name:it.name+(lb?' « '+lb+' »':''),detail:d.join(' · '),price:sheetPrice()});sheet=null;step=null;render();return}
  if(t.dataset.del!==undefined){cart.splice(+t.dataset.del,1);render();return}
  if(t.id==='send'){
   if(addTo){
