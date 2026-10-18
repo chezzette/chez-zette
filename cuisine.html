@@ -156,7 +156,11 @@ const vis=i=>!i.st?true:(STATION?i.st.includes(STATION):i.st.length>0);
 const hereItems=o=>(o.items||[]).filter(vis);
 const showsHere=o=>hereItems(o).length>0;
 const readyHere=o=>o.status==='ready'||(!!STATION&&(o.pd||[]).includes(STATION));
-let dupAck='';
+let dupAck='',editId=null;
+const hl=s=>esc(s).replace(/(sans [^,·]+)/gi,'<b style="color:#c92a2a">$1</b>');
+const noteHTML=n=>n?`<div style="font-weight:800;color:#c92a2a">📝 ${esc(n)}</div>`:'';
+const keyOf=l=>l.name+'|'+l.detail+'|'+(l.drink||'')+'|'+(l.inote||'');
+const TPRIX=3;
 let orders=[],cfg={...DEF},cart=[],cname='',note='',emp=false,view=MODE==='cuisine'?'encours':'caisse',step=null,sheet=null,ready=false,cfgChanged=false,q='',cf='actives',addTo=null,held=null;
 const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 let hid={};try{hid=JSON.parse(LS.get('zette_hid')||'{}')||{}}catch(e){hid={}}
@@ -164,7 +168,7 @@ const isHid=o=>hid[o.id]!==undefined&&hid[o.id]===(o.rev||0);
 const hideOrder=o=>{hid[o.id]=o.rev||0;LS.set('zette_hid',JSON.stringify(hid))};
 const showOrder=o=>{delete hid[o.id];LS.set('zette_hid',JSON.stringify(hid))};
 const byId=id=>orders.find(o=>String(o.id)===String(id));
-function leaveAdd(){addTo=null;if(held){cart=held.cart;cname=held.cname;note=held.note;emp=held.emp;held=null}else cart=[]}
+function leaveAdd(){addTo=null;editId=null;if(held){cart=held.cart;cname=held.cname;note=held.note;emp=held.emp;held=null}else{cart=[];cname='';note='';emp=false}}
 const TABS=MODE==='cuisine'?[['encours','En cours'],['retirees','Retirées']]:[['caisse','Caisse'],['commandes','Commandes'],['menu','Menu']];
 const $=s=>document.querySelector(s);
 const eur=n=>n.toFixed(2).replace('.',',')+' €';
@@ -185,8 +189,8 @@ function listFor(k){
  return lines(src).map(n=>({n,p:0}));
 }
 const optList=(o)=>{const l=listFor(o.k);return o.only?l.filter(x=>o.only.includes(x.n)):l};
-const newSel=()=>({label:'',sauce:new Set(),garniture:new Set(),supp:new Set(),base:'',viande:'',plat:'',boisson:''});
-function sheetPrice(){let p=sheet.it.price;const s=listFor('supp');sheet.sel.supp.forEach(n=>{const x=s.find(y=>y.n===n);if(x)p+=x.p});return p}
+const newSel=()=>({label:'',note:'',plus:0,vsupp:'',sauce:new Set(),garniture:new Set(),supp:new Set(),base:'',viande:'',plat:'',boisson:''});
+function sheetPrice(){let p=sheet.it.price+(sheet.sel.plus||0)*TPRIX;const s=listFor('supp');sheet.sel.supp.forEach(n=>{const x=s.find(y=>y.n===n);if(x)p+=x.p});return p}
 function sheetHTML(){
  const {c,it,sel}=sheet;
  const chips=(k,list,multi)=>list.map(x=>`<button class="chip ${(multi?sel[k].has(x.n):sel[k]===x.n)?'on':''}" data-ch="${k}" data-v="${esc(x.n)}">${esc(x.n)}${x.p?' +'+eur(x.p):''}</button>`).join('');
@@ -197,29 +201,33 @@ function sheetHTML(){
   if(!TITRES[o.k])return;
   h+=`<h3>${TITRES[o.k]}</h3>${chips(o.k,optList(o),['sauce','garniture','supp'].includes(o.k))}`;
  });
- return h+`<button class="big" id="addit">Ajouter – ${eur(sheetPrice())}</button><button class="big gray" id="cancel">Annuler</button>`;
+ if(/tender/.test(norm(c.name)))h+=`<h3>Tenders en plus <small>+${eur(TPRIX)} chacun</small></h3><div class="row" style="justify-content:flex-start;gap:12px"><button class="sm gray" data-plus="-1">−</button><b style="font-size:1.3em">${sel.plus||0}</b><button class="sm" data-plus="1">+</button></div>`;
+ if(c.opts.some(o=>o.k==='viande')&&[...sel.supp].some(n=>/viande/i.test(n)))h+=`<h3>Viande du supplément</h3>${chips('vsupp',listFor('viande'),0)}`;
+ h+=`<h3>Note pour cet article <small>(sans oignon, bien cuit…)</small></h3><input id="inote" maxlength="80" placeholder="Note" value="${esc(sel.note||'')}">`;
+ return h+`<button class="big" id="addit">${sheet.editIdx!=null?'Enregistrer':'Ajouter'} – ${eur(sheetPrice())}</button><button class="big gray" id="cancel">Annuler</button>`;
 }
 function addBanner(){
+ if(editId){const eo=byId(editId);if(eo)return `<div class="cart" style="border:3px solid #f08c00"><div class="row"><b>✏️ Modification de la commande de ${esc(eo.name||('N° '+eo.num))}</b><button class="sm gray" data-canceladd="1">Annuler</button></div></div>`}
  const ao=addTo&&byId(addTo);if(!ao)return '';
  return `<div class="cart" style="border:3px solid var(--ok)"><div class="row"><b>➕ Ajout à la commande de ${esc(ao.name||('N° '+ao.num))}</b><button class="sm gray" data-canceladd="1">Annuler l'ajout</button></div></div>`;
 }
-function addLine(l){const k=l.name+'|'+l.detail+'|'+(l.drink||'');const e=cart.find(c=>c.k===k);if(e)e.qty++;else cart.push({...l,k,qty:1})}
+function addLine(l){const k=keyOf(l);const e=cart.find(c=>c.k===k);if(e)e.qty++;else cart.push({...l,k,qty:1})}
 const cartTotal=()=>cart.reduce((s,c)=>s+c.price*c.qty,0);
-function dupFind(){const n=cname.trim().toLowerCase();if(!n||addTo)return null;const lim=Date.now()-30*60e3;return orders.filter(o=>String(o.name||'').trim().toLowerCase()===n&&o.createdAt>=lim).sort((a,b)=>b.createdAt-a.createdAt)[0]||null}
+function dupFind(){const n=cname.trim().toLowerCase();if(!n||addTo||editId)return null;const lim=Date.now()-30*60e3;return orders.filter(o=>String(o.name||'').trim().toLowerCase()===n&&o.createdAt>=lim).sort((a,b)=>b.createdAt-a.createdAt)[0]||null}
 function dupHTML(){const o=dupFind();return o?`⚠️ « ${esc(o.name)} » a déjà une commande il y a ${Math.max(1,Math.round((Date.now()-o.createdAt)/60000))} min (n° ${o.num}). Touchez « Envoyer » une 2e fois pour confirmer.`:''}
 function cartHTML(){
  const ao=addTo&&byId(addTo);
  const total=cartTotal();
  const nm=ao?esc(ao.name||('N° '+ao.num)):'';
- return `<div class="cart">${cart.length?cart.map((c,i)=>`<div class="row"><span>${c.qty>1?'<b>x'+c.qty+'</b> ':''}${esc(c.name)}${c.detail||c.drink?`<small>${esc([c.detail,c.drink].filter(Boolean).join(' · '))}</small>`:''}</span><span>${eur(c.price*c.qty)} <button class="sm gray" data-dec="${i}">−</button><button class="sm" data-inc="${i}">+</button><button class="sm gray" data-del="${i}">×</button></span></div>`).join(''):'<div class="row">Panier vide</div>'}
+ return `<div class="cart">${cart.length?cart.map((c,i)=>`<div class="row"><span>${c.qty>1?'<b>x'+c.qty+'</b> ':''}${esc(c.name)}${c.detail||c.drink?`<small>${hl([c.detail,c.drink].filter(Boolean).join(' · '))}</small>`:''}${noteHTML(c.inote)}</span><span style="white-space:nowrap">${eur(c.price*c.qty)} <button class="sm gray" data-edl="${i}">✏️</button><button class="sm gray" data-dec="${i}">−</button><button class="sm" data-inc="${i}">+</button><button class="sm gray" data-del="${i}">×</button></span></div>`).join(''):'<div class="row">Panier vide</div>'}
  ${ao?'':`<div class="row" style="gap:6px"><button class="chip ${emp?'':'on'}" data-mode="0" style="flex:1;margin:0">Sur place</button><button class="chip ${emp?'on':''}" data-mode="1" style="flex:1;margin:0">🥡 À emporter</button></div>
  <input id="cname" placeholder="Prénom du client" value="${esc(cname)}" autocomplete="off" style="margin-top:8px"><div id="dupw" style="color:#c92a2a;font-weight:700">${dupHTML()}</div>
  <input id="note" placeholder="Note (sans oignon…)" value="${esc(note)}" style="margin-top:8px">`}
  <div class="row"><b>${ao?"Total de l'ajout":'Total'}</b><b>${eur(total)}</b></div>
- <button class="big" id="send" ${cart.length?'':'disabled'}>${ao?'Ajouter à la commande de '+nm:'Envoyer en cuisine'}</button></div>`;
+ <button class="big" id="send" ${cart.length?'':'disabled'}>${ao?'Ajouter à la commande de '+nm:editId?'Enregistrer les modifications':'Envoyer en cuisine'}</button></div>`;
 }
 function caisseHTML(){
- if(addTo&&!byId(addTo))leaveAdd();
+ if((addTo&&!byId(addTo))||(editId&&!byId(editId)))leaveAdd();
  if(sheet)return sheetHTML();
  const cats=parseCat(cfg.cat),bn=addBanner();
  if(step!==null&&cats[step]){const c=cats[step];
@@ -234,10 +242,10 @@ function orderCard(o,role){
  if(role==='cuisine')btn=(o.status==='new'&&!rh)?`<button class="sm" data-stready="${o.id}">Prête</button>`:`<button class="sm gray" data-hide="${o.id}">Retirer de cet écran</button>`;
  else if(role==='retirees')btn=`<button class="sm gray" data-unhide="${o.id}">Remettre sur cet écran</button>`;
  else btn=o.status==='done'?`<button class="sm gray" data-st="new" data-id="${o.id}">Remettre en cuisine</button>`:`<button class="sm gray" data-st="done" data-id="${o.id}">Servie</button>`;
- const add=role==='caisse'&&o.status!=='done'?`<button class="sm" data-addto="${o.id}">+ Ajouter</button>`:'';
+ const add=role==='caisse'&&o.status!=='done'?`<button class="sm gray" data-editord="${o.id}">✏️ Modifier</button><button class="sm" data-addto="${o.id}">+ Ajouter</button>`:'';
  const upd=o.rev&&o.status==='new'?' <span class="badge upd">✏️ MODIFIÉE</span>':'';
- const items=(role==='caisse'?o.items:hereItems(o)).map(i=>{const dt=[i.detail,role==='caisse'?i.drink:''].filter(Boolean).join(' · ');return `<div class="${i.added?'add':''}"><b>x${i.qty||1}</b> ${esc(i.name)}${i.added?` <span class="badge">➕ AJOUTÉ${i.at?' '+hm(i.at):''}</span>`:''}${dt?`<small>${esc(dt)}</small>`:''}</div>`}).join('');
- return `<div class="tk ${o.status}${o.takeaway?' emp':''}"><div class="row"><h3>${esc(o.name||('N° '+o.num))}${o.takeaway?' <span class="badge">🥡 À EMPORTER</span>':''}${upd}</h3><span>${hm(o.createdAt)} · ${rh?STATUT.ready:(STATUT[o.status]||'')}${role==='caisse'&&o.status==='new'&&(o.pd||[]).length?' · poste '+o.pd.join(', ')+' prêt':''}</span></div>${items}${o.note?`<div><i>${esc(o.note)}</i></div>`:''}<div class="row">${role==='caisse'?`<b>${eur(o.total)}</b>`:'<span></span>'}<span style="display:flex;gap:6px">${add}${btn}</span></div></div>`;
+ const items=(role==='caisse'?o.items:hereItems(o)).map(i=>{const dt=[i.detail,role==='caisse'?i.drink:''].filter(Boolean).join(' · ');return `<div class="${i.added?'add':''}"><b>x${i.qty||1}</b> ${esc(i.name)}${i.added?` <span class="badge">➕ AJOUTÉ${i.at?' '+hm(i.at):''}</span>`:''}${dt?`<small>${hl(dt)}</small>`:''}${noteHTML(i.inote)}</div>`}).join('');
+ return `<div class="tk ${o.status}${o.takeaway?' emp':''}"><div class="row"><h3>${esc(o.name||('N° '+o.num))}${o.takeaway?' <span class="badge">🥡 À EMPORTER</span>':''}${upd}</h3><span>${hm(o.createdAt)} · ${rh?STATUT.ready:(STATUT[o.status]||'')}${role==='caisse'&&o.status==='new'&&(o.pd||[]).length?' · poste '+o.pd.join(', ')+' prêt':''}</span></div>${items}${o.note?`<div style="font-weight:800;color:#c92a2a;margin-top:6px;padding-top:4px;border-top:2px dashed #c92a2a">📝 Note : ${esc(o.note)}</div>`:''}<div class="row">${role==='caisse'?`<b>${eur(o.total)}</b>`:'<span></span>'}<span style="display:flex;gap:6px">${add}${btn}</span></div></div>`;
 }
 function listHTML(){
  if(view==='commandes'){
@@ -267,7 +275,7 @@ function render(){
 }
 function onData(d){
  ready=true;
- if(d.orders){const nz=o=>{const p=String(o.status||'new').split('+');return {...o,status:p[0],pd:p[1]?p[1].split(','):[]}};orders=MODE==='cuisine'?d.orders.map(o=>({...nz(o),total:0,items:(o.items||[]).map(i=>({...i,price:0}))})):d.orders.map(nz)}
+ if(d.orders){const nz=o=>{const p=String(o.status||'new').split('+');return {...o,raw:o.status,status:p[0],pd:p[1]?p[1].split(','):[]}};orders=MODE==='cuisine'?d.orders.map(o=>({...nz(o),total:0,items:(o.items||[]).map(i=>({...i,price:0}))})):d.orders.map(nz)}
  if(d.cfg){Object.keys(DEF).forEach(k=>{if(typeof d.cfg[k]==='string'&&d.cfg[k].trim()&&cfg[k]!==d.cfg[k]){cfg[k]=d.cfg[k];cfgChanged=true}})}
  if(!$('#nav').innerHTML){render();cfgChanged=false;return}
  if((view==='commandes'||view==='encours'||view==='retirees')&&$('#list'))$('#list').innerHTML=listHTML();
@@ -276,12 +284,13 @@ function onData(d){
 }
 function pickItem(ci,ii){
  const c=parseCat(cfg.cat)[ci],it=c.items[ii];
- if(!c.opts.length){addLine({name:it.name,detail:'',drink:'',price:it.price,st:stationsFor(c.name,it.name,'')});step=null;toast(it.name+' ajouté');render();return}
+ if(!c.opts.length){addLine({name:it.name,detail:'',drink:'',inote:'',price:it.price,st:stationsFor(c.name,it.name,''),src:{c:c.name,i:it.name,s:{}}});step=null;toast(it.name+' ajouté');render();return}
  sheet={c,it,sel:newSel()};render();
 }
 document.addEventListener('input',e=>{
  if(e.target.id==='cname'){cname=e.target.value;dupAck='';const w=$('#dupw');if(w)w.textContent=dupHTML()}
  if(e.target.id==='tlabel'&&sheet)sheet.sel.label=e.target.value;
+ if(e.target.id==='inote'&&sheet)sheet.sel.note=e.target.value;
  else if(e.target.id==='note')note=e.target.value;
  else if(e.target.id==='q'){q=e.target.value;$('#list').innerHTML=listHTML()}
 });
@@ -298,38 +307,55 @@ document.addEventListener('click',async e=>{
  if(t.dataset.back){step=null;render();return}
  if(t.dataset.pick!==undefined){pickItem(step,+t.dataset.pick);return}
  if(t.dataset.ch){const k=t.dataset.ch,v=t.dataset.v,s=sheet.sel;if(s[k] instanceof Set){s[k].has(v)?s[k].delete(v):s[k].add(v)}else s[k]=s[k]===v?'':v;render();return}
+ if(t.dataset.plus){sheet.sel.plus=Math.max(0,(sheet.sel.plus||0)+(+t.dataset.plus));render();return}
+ if(t.dataset.edl!==undefined){const i=+t.dataset.edl,l=cart[i],src=l&&l.src;const c=src&&parseCat(cfg.cat).find(x=>x.name===src.c);const it=c&&c.items.find(x=>x.name===src.i);if(!it){toast('Article introuvable dans le menu : supprimez-le et ajoutez-le à nouveau');return}const z=src.s||{};sheet={c,it,editIdx:i,sel:{...newSel(),...z,sauce:new Set(z.sauce||[]),garniture:new Set(z.garniture||[]),supp:new Set(z.supp||[])}};render();return}
  if(t.id==='cancel'){sheet=null;render();return}
  if(t.id==='addit'){
   const {c,it,sel}=sheet,d=[];
   if(c.opts.some(o=>o.k==='enfant')&&!sel.plat){toast('Choisissez le plat');return}
   if(c.opts.some(o=>o.k==='viande')&&!sel.viande){toast('Choisissez la viande');return}
+  const vs=c.opts.some(o=>o.k==='viande')&&[...sel.supp].some(n=>/viande/i.test(n));
+  if(vs&&!sel.vsupp){toast('Choisissez la viande du supplément');return}
   if(sel.plat)d.push(sel.plat);
   if(sel.viande)d.push(sel.viande);
   if(sel.base)d.push(sel.base);
   if(sel.garniture.size)d.push([...sel.garniture].join(', '));
   if(sel.sauce.size)d.push('Sauces : '+[...sel.sauce].join(', '));
-  if(sel.supp.size)d.push('Supp : '+[...sel.supp].join(', '));
-  const lb=(sel.label||'').trim();addLine({name:it.name+(lb?' « '+lb+' »':''),detail:d.join(' · '),drink:sel.boisson||'',price:sheetPrice(),st:stationsFor(c.name,it.name,sel.plat)});sheet=null;step=null;render();return}
+  if(sel.supp.size)d.push('Supp : '+[...sel.supp].map(n=>vs&&/viande/i.test(n)?n+' ('+sel.vsupp+')':n).join(', '));
+  if(sel.plus)d.push('+'+sel.plus+' tender'+(sel.plus>1?'s':''));
+  const lb=(sel.label||'').trim();
+  const src={c:c.name,i:it.name,s:{...sel,sauce:[...sel.sauce],garniture:[...sel.garniture],supp:[...sel.supp]}};
+  const line={name:it.name+(lb?' « '+lb+' »':''),detail:d.join(' · '),drink:sel.boisson||'',inote:(sel.note||'').trim(),price:sheetPrice(),st:stationsFor(c.name,it.name,sel.plat),src};
+  if(sheet.editIdx!=null&&cart[sheet.editIdx]){const old=cart[sheet.editIdx];cart[sheet.editIdx]={...old,...line,k:keyOf(line)}}else addLine(line);
+  sheet=null;step=null;render();return}
  if(t.dataset.del!==undefined){cart.splice(+t.dataset.del,1);render();return}
  if(t.dataset.inc!==undefined){cart[+t.dataset.inc].qty++;render();return}
  if(t.dataset.dec!==undefined){const l=cart[+t.dataset.dec];if(l.qty>1)l.qty--;else cart.splice(+t.dataset.dec,1);render();return}
  if(t.id==='send'){
+  if(editId){const o=byId(editId);if(!o){toast('Commande introuvable');leaveAdd();render();return}
+   if(!cname.trim()){toast('Entrez le prénom du client');return}
+   const items=cart.map(({k,...r})=>r),total=cartTotal();
+   const sig=l=>JSON.stringify(l.map(i=>[i.name,i.detail,i.drink||'',i.inote||'',i.qty||1]));
+   const changed=sig(items)!==sig(o.items);
+   try{await B.addItems(o,{items,total,name:cname.trim(),note:note.trim(),takeaway:emp,rev:(o.rev||0)+1,status:changed?'new':(o.raw||o.status)});leaveAdd();view='commandes';cf='actives';step=null;render();toast('Commande modifiée ✓')}catch(err){fail(err)}
+   return}
   if(addTo){
    const o=byId(addTo);
    if(!o){toast('Commande introuvable');leaveAdd();render();return}
    const now=Date.now();
-   const add=cart.map(c=>({name:c.name,detail:c.detail,drink:c.drink||'',st:c.st,qty:c.qty,price:c.price,added:true,at:now}));
+   const add=cart.map(c=>({name:c.name,detail:c.detail,drink:c.drink||'',inote:c.inote||'',st:c.st,src:c.src,qty:c.qty,price:c.price,added:true,at:now}));
    const sum=cartTotal();
    try{await B.addItems(o,{items:o.items.concat(add),total:o.total+sum,rev:(o.rev||0)+1,status:'new'});const nm=o.name||('N° '+o.num);leaveAdd();view='commandes';cf='actives';step=null;render();toast('Ajouté à la commande de '+nm+' ✓')}catch(err){fail(err)}
    return}
   if(!cname.trim()){toast('Entrez le prénom du client');const i=$('#cname');if(i)i.focus();return}
   const dn=cname.trim().toLowerCase();
   if(dupFind()&&dupAck!==dn){dupAck=dn;const w=$('#dupw');if(w)w.textContent=dupHTML();toast('Ce prénom a déjà une commande récente');return}
-  const items=cart.map(c=>({name:c.name,detail:c.detail,drink:c.drink||'',st:c.st,qty:c.qty,price:c.price}));
+  const items=cart.map(c=>({name:c.name,detail:c.detail,drink:c.drink||'',inote:c.inote||'',st:c.st,src:c.src,qty:c.qty,price:c.price}));
   const total=cartTotal();
   try{await B.send({day:getDay(),name:cname.trim(),items,total,note:note.trim(),takeaway:emp});cart=[];cname='';note='';emp=false;dupAck='';step=null;render();toast('Envoyée en cuisine ✓')}catch(err){fail(err)}
   return}
- if(t.dataset.addto){if(!addTo)held={cart,cname,note,emp};addTo=t.dataset.addto;cart=[];cname='';note='';emp=false;view='caisse';step=null;sheet=null;render();return}
+ if(t.dataset.editord){const o=byId(t.dataset.editord);if(!o)return;if(!addTo&&!editId)held={cart,cname,note,emp};addTo=null;editId=o.id;cart=o.items.map(i=>({...i,qty:i.qty||1,k:keyOf(i)}));cname=o.name||'';note=o.note||'';emp=!!o.takeaway;view='caisse';step=null;sheet=null;render();return}
+ if(t.dataset.addto){if(!addTo&&!editId)held={cart,cname,note,emp};editId=null;addTo=t.dataset.addto;cart=[];cname='';note='';emp=false;view='caisse';step=null;sheet=null;render();return}
  if(t.dataset.canceladd){leaveAdd();render();return}
  if(t.dataset.hide){const o=byId(t.dataset.hide);if(o){hideOrder(o);render()}return}
  if(t.dataset.unhide){const o=byId(t.dataset.unhide);if(o){showOrder(o);render()}return}
