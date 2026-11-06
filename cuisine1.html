@@ -50,7 +50,7 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .st{font:600 12px/1 var(--ui);padding:5px 8px;border-radius:4px;white-space:nowrap}
 .s-web{background:var(--bleu-c);color:var(--bleu)}.s-prep{background:var(--ambre-c);color:var(--ambre)}.s-ready{background:var(--turq-c);color:var(--turq-f)}.s-done{background:#eee8eb;color:var(--gris)}.s-off{background:var(--rouge-c);color:var(--rouge)}
 .sum{font-size:13px;color:var(--gris);line-height:1.45}
-.sum .sp{color:var(--turq-f);font-weight:700;font-size:14px}.sum .rt{color:var(--rouge);font-weight:700;font-size:14px}
+.sum .sp{color:var(--turq-f);font-weight:700;font-size:14px}.sum .rt{color:var(--rouge);font-weight:700;font-size:15px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--encre);color:#fff;padding:11px 16px;border-radius:8px;z-index:60;font-weight:600;max-width:calc(100% - 32px);text-align:center}
 /* ---------- site client ---------- */
 .cl{max-width:460px;margin:0 auto;min-height:calc(100vh - 52px);background:var(--fond);position:relative;padding-bottom:90px}
@@ -172,7 +172,7 @@ table.v td.n{text-align:right}
 .rub.sup dt{color:var(--turq-f)}.rub.sup dd{color:var(--turq-f)}.rub.sup dd::before{content:"+ "}
 .rub.ret{background:var(--rouge-c);border-left:5px solid var(--rouge)}
 .rub.ret dt{color:var(--rouge)}.rub.ret dd{color:var(--rouge)}.rub.ret dd::before{content:"Sans "}
-.rq{margin:5px 0 0;padding:4px 7px;border-left:3px solid var(--encre);background:#fdf1f6;font-size:13.5px}.rq b{font:600 10px/1 var(--ui);letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:2px;color:var(--gris)}
+.rq{margin:6px 0 0;padding:6px 8px;border-radius:5px;border-left:5px solid var(--rouge);background:var(--rouge-c);color:var(--rouge);font:700 18px/1.25 var(--cond);letter-spacing:.01em}.rq b{font:700 10.5px/1.6 var(--ui);letter-spacing:.07em;text-transform:uppercase;display:block;color:var(--rouge)}
 .tk .tf{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;border-top:1px solid var(--trait)}
 .tk .tf .btn{min-height:34px;padding:6px 12px}
 .kbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);border-bottom:1px solid var(--trait);padding:8px max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px))}
@@ -317,7 +317,7 @@ function makeLine(c,it,s){const qty=s.qty||1,sel={...s,qty:1,gopen:false};const 
   return {cn:c.name,inm:it.name,name:it.name+(lb?' « '+lb+' »':''),kn:has(c,'enfant')&&s.plat?'Menu enfant '+(/croque/i.test(s.plat)?'croque':'nuggets'):'',sel,qty,unit:unit(c,it,sel),rub:rubrics(c,it,sel)}}
 function sumHTML(l){if(!l.rub)return l.detail?`<div class="sum">${esc(l.detail)}</div>`:'';
   const p=l.rub.map(([k,lab,v])=>k==='sup'?`<span class="sp">${v.map(x=>'+ '+esc(x)).join(', ')}</span>`:k==='ret'?`<span class="rt">${v.map(x=>'Sans '+esc(x)).join(', ')}</span>`:esc(v.join(', '))+(lab==='Sauces à part'?' <b>(à part)</b>':''));
-  if(l.sel&&l.sel.plat)p.unshift(esc(l.sel.plat));if(l.sel&&l.sel.note)p.push('<i>« '+esc(l.sel.note)+' »</i>');return p.length?`<div class="sum">${p.join(' · ')}</div>`:''}
+  if(l.sel&&l.sel.plat)p.unshift(esc(l.sel.plat));if(l.sel&&l.sel.note)p.push('<span class="rt">Remarque : '+esc(l.sel.note)+'</span>');return p.length?`<div class="sum">${p.join(' · ')}</div>`:''}
 
 /* ---------- postes ---------- */
 function stationsFor(cat,item,plat){const c=norm(cat),n=norm(item),p=norm(plat);if(/boisson/.test(c))return[];if(/hot ?dog|corn ?dog/.test(c))return['1'];if(/frite/.test(c))return['1','2'];if(/wrap|tacos/.test(c))return['2','3'];if(/burger|burgeur|americain|tender|nugget/.test(c))return['2'];if(/panini/.test(c))return /carnivor|fermier/.test(n)?['2','3']:['3'];if(/croque/.test(c))return['3'];if(/enfant/.test(c))return /croque/.test(p)?['3']:['2'];return['1','2','3']}
@@ -506,7 +506,6 @@ function regHTML(){const R=RUPT();const chipR=(key,label)=>`<button class="chip"
   <h3>Code de l'onglet Ventes</h3><div style="display:flex;gap:8px;max-width:380px"><input class="inp" id="newcode" inputmode="numeric" maxlength="6" placeholder="Nouveau code (4 à 6 chiffres)"><button class="btn p" data-a="setcode">Enregistrer</button></div>
   <h3>Effacement automatique</h3><div class="oc" style="max-width:560px"><div class="b"><div class="it" style="align-items:center"><label for="cleanup">Heure de l'effacement de chaque nuit</label><input class="inp" id="cleanup" type="time" value="${esc(CFG.cleanup||'00:00')}" style="width:130px"></div><div class="sum">Toutes les commandes et leurs détails sont effacés définitivement à cette heure-là, même si les tablettes sont éteintes. Une alerte prévient 30 minutes avant s'il reste des commandes pas terminées. Le menu, les prix, les photos et les réglages ne sont jamais effacés.</div></div>
   <div class="f"><button class="btn" data-a="savecleanup">${ic('check')}Enregistrer l'heure</button><button class="btn r" data-a="wipe">${ic('trash')}Tout effacer maintenant</button></div></div>
-  ${S.runs.length?`<h3>Derniers effacements</h3><div style="overflow-x:auto"><table class="v"><tr><th>Nuit</th><th class="n">Effacées</th><th class="n">Non terminées</th></tr>${S.runs.map(r=>`<tr><td>${new Date(r.ran_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})}</td><td class="n">${r.deleted}</td><td class="n">${r.unfinished}</td></tr>`).join('')}</table></div>`:''}
   </div>`}
 
 /* ====================== CUISINE ====================== */
@@ -540,7 +539,13 @@ function draw(){const app=$('#app');if(!app)return;
   if(S.ready&&MODE!=='cuisine')h+=sheetHTML();
   if(MODE==='client'&&S.showReady&&S.client.mine)h+=`<div class="ready" role="alertdialog"><svg class="i" style="width:64px;height:64px"><use href="#i-check"/></svg><div class="n">N° ${esc(S.client.mine.num)}</div><p>Votre commande est prête ! Vous pouvez venir la récupérer au snack. Merci pour votre commande.</p><button class="btn g" data-a="readyok">OK</button></div>`;
   if(S.toast)h+=`<div class="toast" role="status">${esc(S.toast)}</div>`;
+  // garder la position de défilement (fiche produit, liste, panier, page) pendant la mise à jour de l'écran
+  const keyOf=el=>{const c=(el.className&&el.className.baseVal==null?el.className:'')||el.tagName;return c+'|'+[...app.querySelectorAll('.'+String(c).trim().split(/\s+/).join('.'))].indexOf(el)};
+  const keep=[];app.querySelectorAll('*').forEach(el=>{if(el.scrollTop>0||el.scrollLeft>0){try{keep.push([keyOf(el),el.scrollTop,el.scrollLeft])}catch(e){}}});
+  const wx=scrollX,wy=scrollY;
   app.innerHTML=h;
+  keep.forEach(([k,t,l])=>{const [c,i]=k.split('|');try{const el=[...app.querySelectorAll('.'+c.trim().split(/\s+/).join('.'))][+i];if(el){el.scrollTop=t;el.scrollLeft=l}}catch(e){}});
+  if(wx||wy)window.scrollTo(wx,wy);
   if(fid){const el=document.getElementById(fid);if(el&&el.tagName==='INPUT'){el.focus();try{el.setSelectionRange(ss,ss)}catch(e){}}}}
 function onData(d){if(d.cfg)setCfg(d.cfg);if(d.photos)S.photos={...d.photos};if(d.runs)S.runs=d.runs;
   if(d.orders){S.orders=d.orders.map(o=>{const x=parseSt(o.status);return {...o,raw:o.status,status:x.base,pd:x.pd,gv:x.gv,createdAt:Date.parse(o.created_at||o.createdAt)||Date.now(),updatedAt:o.updated_at?Date.parse(o.updated_at):null,arrived:o.arrived?Date.parse(o.arrived):null,origin:o.origin||((o.token||'')?'web':'cpt'),items:(o.items||[]).map(l=>({...l,qty:+l.qty||1,unit:+(l.unit!=null?l.unit:l.price)||0}))}});
