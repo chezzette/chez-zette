@@ -250,8 +250,7 @@ const B={online:true,
   if(MODE==='caisse'){try{await sb.rpc('zette_cleanup')}catch(e){}}
   const o=await sb.from('orders').select('*').order('created_at');if(o.error)throw o.error;
   const d={orders:o.data.map(r=>({...r,total:+r.total}))};
-  if(MODE==='caisse'){const c=await sb.from('config').select('data').eq('id',1).maybeSingle();if(!c.error&&c.data)d.cfg=c.data.data;
-   const r=await sb.from('zette_runs').select('*').order('target',{ascending:false}).limit(7);if(!r.error)d.runs=r.data}
+  if(MODE==='caisse'){const c=await sb.from('config').select('data').eq('id',1).maybeSingle();if(!c.error&&c.data)d.cfg=c.data.data;}
   B.online=true;B.cb(d)}catch(e){B.online=false}},
  async loadPhotos(){const r=await sb.from('photos').select('name,data');if(!r.error&&r.data){const m={};r.data.forEach(x=>m[x.name]=x.data);B.cb({photos:m})}},
  start(){if(B.started)return;B.started=true;B.load();if(MODE==='caisse')B.loadPhotos();
@@ -440,7 +439,6 @@ function bannersHTML(){let h='';const nweb=S.orders.filter(o=>o.status==='web').
   if(nweb&&S.caisse.tab!=='cmd')h+=`<button class="banner b-web" data-a="gotoweb">${ic('globe')}${nweb} commande${nweb>1?'s':''} en ligne à valider</button>`;
   const nc=nextCleanup(),mins=Math.round((nc-Date.now())/60000),pend=S.orders.filter(o=>o.status==='new'||o.status==='ready'||o.status==='web');
   if(mins<=30&&pend.length)h+=`<div class="banner b-al"><div class="h">${ic('alert')}Effacement automatique à ${hm(nc)} (dans ${Math.max(0,mins)} min) : ${pend.length} commande${pend.length>1?'s':''} pas terminée${pend.length>1?'s':''}</div>${pend.map(o=>`<div class="r"><span><b>N° ${o.num} ${esc(o.name)}</b> · ${STAT[o.status][1].toLowerCase()}</span><span>${o.status==='web'?'':`<button class="btn p" data-a="ost" data-id="${o.id}" data-s="done">Récupérée</button>`}</span></div>`).join('')}</div>`;
-  const r=S.runs[0];if(r&&Date.now()-Date.parse(r.ran_at)<18*3600e3&&LS.get('zette_runseen',null)!==r.target)h+=`<div class="banner b-ok"><div class="h">${ic('trash')}Effacement de cette nuit (${new Date(r.ran_at).toLocaleDateString('fr-FR')} à ${hm(r.ran_at)}) : ${r.deleted} commande${r.deleted>1?'s':''} effacée${r.deleted>1?'s':''}${r.unfinished?`, dont ${r.unfinished} non terminée${r.unfinished>1?'s':''}`:''}.</div><button class="btn" data-a="runseen" data-k="${esc(r.target)}">OK</button></div>`;
   return h}
 function caisseHTML(){const Y=S.caisse;const nweb=S.orders.filter(o=>o.status==='web').length;
   let h=`<div class="cs"><div class="bar"><img src="${LOGO}" alt=""><b>Chez Zette</b>
