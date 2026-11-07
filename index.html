@@ -209,6 +209,7 @@ button.banner{flex-direction:row;align-items:center}
 .srch{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--trait-f);border-radius:8px;padding:0 6px 0 12px;margin-bottom:10px;max-width:520px}.srch .inp{border:0;flex:1;min-width:0;padding-left:0;background:transparent}.srch>svg{color:var(--gris)}
 .srch:focus-within{border-color:var(--turq);box-shadow:0 0 0 3px rgba(31,127,118,.15)}.srch .inp:focus{outline:0;box-shadow:none}
 .tag.t-add{background:var(--turq);color:#fff;border-color:var(--turq)}.editban.addban{background:var(--turq-c);color:var(--turq-f);border-bottom-color:#9fd0ca}
+.srch input[type=search]::-webkit-search-cancel-button{display:none}
 
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -470,10 +471,11 @@ function priseHTML(){const Y=S.caisse,c=Y.cat==null?null:CATS[Y.cat];const eo=Y.
 function dupFind(){const Y=S.caisse,n=Y.name.trim().toLowerCase();if(!n||Y.edit||Y.add)return null;const lim=Date.now()-30*60e3;return S.orders.filter(o=>!OFF(o.status)&&String(o.name||'').trim().toLowerCase()===n&&o.createdAt>=lim).sort((a,b)=>b.createdAt-a.createdAt)[0]||null}
 const dupTxt=o=>`« ${esc(o.name)} » a déjà une commande il y a ${Math.max(1,Math.round((Date.now()-o.createdAt)/60000))} min (N° ${o.num}). Touchez « Envoyer » une 2e fois pour confirmer.`;
 function tagsHTML(o){return `<span class="tag ${o.origin==='web'?'t-web':'t-cpt'}">${o.origin==='web'?ic('globe','width:13px;height:13px')+'En ligne':'Comptoir'}</span><span class="tag ${o.takeaway?'t-emp':'t-sp'}">${o.takeaway?'À emporter':'Sur place'}</span>${o.arrived&&o.origin==='web'?`<span class="tag t-la">${ic('user','width:13px;height:13px')}Client là ${hm(o.arrived)}</span>`:''}`}
-function cmdHTML(){const Y=S.caisse;const F=[['web','À valider'],['cours','En cours'],['pretes','Prêtes'],['recup','Récupérées'],['annul','Annulées']];
+function cmdHTML(){const Y=S.caisse;return `<div class="list"><div class="srch">${ic('user')}<input class="inp" id="osearch" type="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Rechercher un prénom ou un numéro" value="${esc(Y.q||'')}"><button class="btn ic" data-a="clrq" aria-label="Effacer la recherche" ${Y.q?'':'style="visibility:hidden"'}>${ic('x')}</button></div><div id="olist">${cmdBody()}</div></div>`}
+function cmdBody(){const Y=S.caisse;const F=[['web','À valider'],['cours','En cours'],['pretes','Prêtes'],['recup','Récupérées'],['annul','Annulées']];
   const test={web:o=>o.status==='web',cours:o=>o.status==='new',pretes:o=>o.status==='ready',recup:o=>o.status==='done',annul:o=>OFF(o.status)};
   const q=norm((Y.q||'').trim());const l=sortO(S.orders.filter(q?o=>norm(o.name).includes(q)||String(o.num)===q:test[Y.filter]));
-  return `<div class="list"><div class="srch">${ic('user')}<input class="inp" id="osearch" type="text" enterkeyhint="search" autocomplete="off" placeholder="Rechercher un prénom ou un numéro" value="${esc(Y.q||'')}">${Y.q?`<button class="btn ic" data-a="clrq" aria-label="Effacer la recherche">${ic('x')}</button>`:''}</div>${q?`<div class="sum" style="margin:0 0 10px">${l.length} résultat${l.length>1?'s':''} pour « ${esc(Y.q.trim())} », toutes commandes confondues</div>`:''}<div class="filters" ${q?'style="opacity:.45"':''}>${F.map(([k,n])=>`<button class="${Y.filter===k?'on':''}" data-a="filt" data-k="${k}">${n} (${S.orders.filter(test[k]).length})</button>`).join('')}</div>
+  return `${q?`<div class="sum" style="margin:0 0 10px">${l.length} résultat${l.length>1?'s':''} pour « ${esc(Y.q.trim())} », toutes commandes confondues</div>`:''}<div class="filters" ${q?'style="opacity:.45"':''}>${F.map(([k,n])=>`<button class="${Y.filter===k?'on':''}" data-a="filt" data-k="${k}">${n} (${S.orders.filter(test[k]).length})</button>`).join('')}</div>
   ${l.length?l.map(o=>{const [sc,sl]=STAT[o.status]||['s-done',o.status];const pd=o.status==='new'&&o.pd.length?` <span class="sum">· poste ${o.pd.join(', ')} prêt</span>`:'';let acts='';
     if(o.status==='web')acts=`<button class="btn r" data-a="refuse" data-id="${o.id}">Refuser</button><button class="btn p" data-a="accept" data-id="${o.id}">${ic('check')}Valider</button>`;
     else if(o.status==='new'||o.status==='ready')acts=`<button class="btn ic" data-a="odel" data-id="${o.id}" aria-label="Supprimer">${ic('trash')}</button>${o.origin==='web'&&!o.arrived?`<button class="btn o" data-a="carrive" data-id="${o.id}">${ic('user')}Client là</button>`:''}<button class="btn" data-a="addto" data-id="${o.id}">${ic('plus')}Ajouter</button><button class="btn" data-a="editord" data-id="${o.id}">${ic('edit')}Modifier</button><button class="btn p" data-a="ost" data-id="${o.id}" data-s="done">${ic('check')}Récupérée</button>`;
@@ -483,7 +485,7 @@ function cmdHTML(){const Y=S.caisse;const F=[['web','À valider'],['cours','En c
     const tot=o.status==='web'||o.status==='refused'?o.items.reduce((a,l)=>{const {c,it}=findIt(l.cn,l.inm);return a+(it&&l.sel?unit(c,it,l.sel):l.unit)*l.qty},0):o.total;
     return `<div class="oc ${o.arrived&&o.origin==='web'&&o.status!=='done'?'la':''}"><div class="h"><span><span class="no">N° ${o.num}</span> <b>${esc(o.name)}</b> <span style="color:var(--gris)">${hm(o.createdAt)}</span></span><span style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${tagsHTML(o)}<span class="st ${sc}">${sl}</span>${pd}</span></div>
     <div class="b">${o.items.map((it,k)=>`<div style="${isGiven(o,k)?'opacity:.55':''}"><div class="it"><b>${it.qty} × ${esc(it.name)}${isGiven(o,k)?' · donnée':''}${it.add?' <span class="tag t-add">Ajouté</span>':''}</b><span>${eur(it.unit*it.qty)}</span></div>${sumHTML(it)}</div>`).join('')}${o.note?`<div class="rq"><b>Remarque</b>${esc(o.note)}</div>`:''}</div>
-    <div class="f"><b style="font-size:16px">${eur(tot)}</b><span class="acts">${acts}</span></div></div>`}).join(''):`<div class="empty">Aucune commande ici</div>`}</div>`}
+    <div class="f"><b style="font-size:16px">${eur(tot)}</b><span class="acts">${acts}</span></div></div>`}).join(''):`<div class="empty">${(Y.q||'').trim()?'Aucune commande à ce nom aujourd\'hui. Les commandes sont effacées chaque nuit.':'Aucune commande ici'}</div>`}`}
 async function sha(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('zette:'+s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return 'p:'+s}}
 function ventesHTML(){const Y=S.caisse;
   if(!CFG.vcode)return `<div class="lock">${ic('lock','width:28px;height:28px')}<h2 style="margin:8px 0 4px">Choisissez le code des ventes</h2><p style="color:var(--gris);margin:0 0 14px">4 à 6 chiffres. Il sera demandé pour ouvrir cet onglet.</p><input class="inp pin" id="newcode" inputmode="numeric" maxlength="6" placeholder="••••" aria-label="Nouveau code"><div style="height:10px"></div><button class="btn p g" data-a="setcode">Enregistrer le code</button></div>`;
@@ -555,8 +557,8 @@ function onData(d){if(d.cfg)setCfg(d.cfg);if(d.photos)S.photos={...d.photos};if(
   if(d.orders){S.orders=d.orders.map(o=>{const x=parseSt(o.status);return {...o,raw:o.status,status:x.base,pd:x.pd,gv:x.gv,createdAt:Date.parse(o.created_at||o.createdAt)||Date.now(),updatedAt:o.updated_at?Date.parse(o.updated_at):null,arrived:o.arrived?Date.parse(o.arrived):null,origin:o.origin||((o.token||'')?'web':'cpt'),items:(o.items||[]).map(l=>({...l,qty:+l.qty||1,unit:+(l.unit!=null?l.unit:l.price)||0}))}});
     if(MODE==='caisse'){const web=S.orders.filter(o=>o.status==='web').map(o=>o.id);if(S.seenWeb&&web.some(id=>!S.seenWeb.includes(id)))beep(2);S.seenWeb=web}}
   S.ready=true;
-  const ae0=document.activeElement||{};const busy=(MODE!=='cuisine'&&X().sheet)||(['INPUT','TEXTAREA'].includes(ae0.tagName)&&ae0.id!=='osearch');
-  if(busy&&MODE==='caisse'&&S.caisse.tab!=='reg'){const b=$('.bans');if(b)b.innerHTML=bannersHTML();return}
+  const ae0=document.activeElement||{};const busy=(MODE!=='cuisine'&&X().sheet)||['INPUT','TEXTAREA'].includes(ae0.tagName);
+  if(busy&&MODE==='caisse'&&S.caisse.tab!=='reg'){const b=$('.bans');if(b)b.innerHTML=bannersHTML();const ol=$('#olist');if(ol&&ae0.id==='osearch')ol.innerHTML=cmdBody();return}
   if(busy&&MODE!=='caisse')return;
   if(MODE==='caisse'&&S.caisse.tab==='reg'&&['INPUT','TEXTAREA'].includes((document.activeElement||{}).tagName))return;
   draw()}
@@ -565,7 +567,7 @@ function onData(d){if(d.cfg)setCfg(d.cfg);if(d.photos)S.photos={...d.photos};if(
 document.addEventListener('input',e=>{const t=e.target,Y=X();
   if(t.id==='inote'&&Y.sheet)Y.sheet.sel.note=t.value;else if(t.id==='tlabel'&&Y.sheet)Y.sheet.sel.label=t.value;
   else if(t.id==='cname'){Y.name=t.value;if(MODE==='caisse'){S.caisse.dupAck='';const w=$('#dupw');const d=dupFind();if(w)w.innerHTML=d?dupTxt(d):''}}
-  else if(t.id==='cnote')Y.note=t.value;else if(t.id==='pin')S.caisse.pin=t.value;else if(t.id==='osearch'){S.caisse.q=t.value;draw()}});
+  else if(t.id==='cnote')Y.note=t.value;else if(t.id==='pin')S.caisse.pin=t.value;else if(t.id==='osearch'){S.caisse.q=t.value;const ol=$('#olist');if(ol)ol.innerHTML=cmdBody();const cb=$('[data-a=clrq]');if(cb)cb.style.visibility=t.value?'visible':'hidden'}});
 document.addEventListener('change',async e=>{const t=e.target;if(t.type==='file'&&t.files&&t.files[0]&&B.savePhoto){const n=t.dataset.n,f=t.files[0];
   try{toast('Enregistrement de la photo…');const url=URL.createObjectURL(f);const img=new Image();await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=url});const M=640,k=Math.min(1,M/Math.max(img.width,img.height));const cv=document.createElement('canvas');cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(url);
     const d=cv.toDataURL('image/jpeg',.78);await B.savePhoto(n,d);S.photos[n]=d;toast('Photo enregistrée')}catch(err){fail(err)}}});
