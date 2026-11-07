@@ -206,6 +206,9 @@ button.banner{flex-direction:row;align-items:center}
 .srow{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--trait);border-radius:6px;padding:6px 6px 6px 12px;background:#fff}
 .sheet .sub{font-weight:600;font-size:14px;margin:0 0 6px}
 @media (max-width:640px){.cs .bar .tb .tl{display:none}.cs .bar .tb{padding:9px}}
+.srch{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--trait-f);border-radius:8px;padding:0 6px 0 12px;margin-bottom:10px;max-width:520px}.srch .inp{border:0;flex:1;min-width:0;padding-left:0;background:transparent}.srch>svg{color:var(--gris)}
+.srch:focus-within{border-color:var(--turq);box-shadow:0 0 0 3px rgba(31,127,118,.15)}.srch .inp:focus{outline:0;box-shadow:none}
+.tag.t-add{background:var(--turq);color:#fff;border-color:var(--turq)}.editban.addban{background:var(--turq-c);color:var(--turq-f);border-bottom-color:#9fd0ca}
 
 </style></head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -317,10 +320,12 @@ function parseSt(raw){const [a,g]=String(raw||'new').split('#');const p=a.split(
 const fmtSt=x=>x.base+(x.base==='new'&&x.pd.length?'+'+x.pd.join(','):'')+(x.gv.length?'#'+x.gv.join(','):'');
 const OFF=s=>s==='refused'||s==='deleted';
 const isGiven=(o,k)=>(o.gv||[]).includes(k)||!!(o.items[k]&&o.items[k].gv);
+// quand le poste 3 (panini) a validé, le grill n'a plus à valider les articles qu'il partage avec lui
+const grillFree=(o,pd)=>{let any=false;const ok=o.items.every((l,k)=>{if(isGiven(o,k))return true;const st=itemSt(o,l);if(!st.includes('2'))return true;any=true;return st.includes('3')});return any&&ok&&pd.includes('3')};
 const needSt=o=>{const n=new Set();o.items.forEach((l,k)=>{if(!isGiven(o,k))itemSt(o,l).forEach(x=>n.add(x))});return n};
 async function writeSt(o,mut){let raw=o.raw||o.status;if(B.fresh){try{const fs=await B.fresh(o.id);if(fs==null)return;raw=fs}catch(e){}}
   const x=parseSt(raw);if(x.base==='done'||x.base==='web'||OFF(x.base))return;mut(x);
-  if(x.base==='new'){const need=needSt({...o,gv:x.gv});if([...need].every(y=>x.pd.includes(y)))x.base='ready'}
+  if(x.base==='new'){const need=needSt({...o,gv:x.gv});if([...need].every(y=>x.pd.includes(y)||(y==='2'&&grillFree({...o,gv:x.gv},x.pd))))x.base='ready'}
   await B.status(o.id,fmtSt(x))}
 
 /* ---------- état ---------- */
@@ -426,7 +431,6 @@ function bannersHTML(){let h='';const nweb=S.orders.filter(o=>o.status==='web').
   if(nweb&&S.caisse.tab!=='cmd')h+=`<button class="banner b-web" data-a="gotoweb">${ic('globe')}${nweb} commande${nweb>1?'s':''} en ligne à valider</button>`;
   const nc=nextCleanup(),mins=Math.round((nc-Date.now())/60000),pend=S.orders.filter(o=>o.status==='new'||o.status==='ready'||o.status==='web');
   if(mins<=30&&pend.length)h+=`<div class="banner b-al"><div class="h">${ic('alert')}Effacement automatique à ${hm(nc)} (dans ${Math.max(0,mins)} min) : ${pend.length} commande${pend.length>1?'s':''} pas terminée${pend.length>1?'s':''}</div>${pend.map(o=>`<div class="r"><span><b>N° ${o.num} ${esc(o.name)}</b> · ${STAT[o.status][1].toLowerCase()}</span><span>${o.status==='web'?'':`<button class="btn p" data-a="ost" data-id="${o.id}" data-s="done">Récupérée</button>`}</span></div>`).join('')}</div>`;
-  const r=S.runs[0];if(r&&Date.now()-Date.parse(r.ran_at)<18*3600e3&&LS.get('zette_runseen',null)!==r.target)h+=`<div class="banner b-ok"><div class="h">${ic('trash')}Effacement de cette nuit (${new Date(r.ran_at).toLocaleDateString('fr-FR')} à ${hm(r.ran_at)}) : ${r.deleted} commande${r.deleted>1?'s':''} effacée${r.deleted>1?'s':''}${r.unfinished?`, dont ${r.unfinished} non terminée${r.unfinished>1?'s':''}`:''}.</div><button class="btn" data-a="runseen" data-k="${esc(r.target)}">OK</button></div>`;
   return h}
 function caisseHTML(){const Y=S.caisse;const nweb=S.orders.filter(o=>o.status==='web').length;
   let h=`<div class="cs"><div class="bar"><img src="${LOGO}" alt=""><b>Chez Zette</b>
@@ -436,35 +440,36 @@ function caisseHTML(){const Y=S.caisse;const nweb=S.orders.filter(o=>o.status===
   return h+'</div>'}
 function catTiles(){return `<div class="prods tiles">${CATS.map((k,i)=>{const o=k.items.length&&k.items.every(it=>off('i',it.name));const q=S.caisse.cart.filter(l=>l.cn===k.name).reduce((a,l)=>a+l.qty,0);const pk=S.photos['#'+k.name]?'#'+k.name:((k.items.find(it=>S.photos[it.name])||{}).name||'#'+k.name);
   return `<button class="pc ${o?'off':''}" data-a="ccat" data-i="${i}" ${o?'disabled':''}>${photo(pk)}${q?`<span class="q">×${q}</span>`:''}<span class="nm" style="font-size:16px;padding-bottom:12px">${esc(cname(k.name))}</span></button>`}).join('')}</div>`}
-function priseHTML(){const Y=S.caisse,c=Y.cat==null?null:CATS[Y.cat];const eo=Y.edit&&byId(Y.edit);
+function priseHTML(){const Y=S.caisse,c=Y.cat==null?null:CATS[Y.cat];const eo=Y.edit&&byId(Y.edit);const ao=Y.add&&byId(Y.add);
   const prods=!c?'':`<div class="crumb"><button class="btn" data-a="cback">${ic('undo')}Catégories</button><b>${esc(cname(c.name))}</b></div>`+c.items.map(it=>{const o=off('i',it.name);const q=Y.cart.filter(l=>l.inm===it.name).reduce((a,l)=>a+l.qty,0);
     return `<button class="pc ${o?'off':''}" ${o?'disabled':`data-a="open" data-c="${esc(c.name)}" data-n="${esc(it.name)}"`}>${photo(it.name)}${q?`<span class="q">×${q}</span>`:''}<span class="nm">${esc(it.name)}</span><span class="px">${o?'Rupture':eur(it.price)}</span></button>`}).join('');
   const dup=dupFind();
-  const head=eo?`<div class="editban">${ic('edit')}<span>Modification de la commande <b>N° ${eo.num} ${esc(eo.name)}</b></span><button class="btn" data-a="canceledit">Annuler</button></div>`:'';
-  const foot=`<div class="seg"><button class="${Y.mode==='sp'?'on':''}" data-a="mode" data-k="sp">Sur place</button><button class="${Y.mode==='emp'?'on':''}" data-a="mode" data-k="emp">À emporter</button></div>
+  const head=ao?`<div class="editban addban">${ic('plus')}<span>Ajout à la commande <b>N° ${ao.num} ${esc(ao.name)}</b> : choisissez les articles en plus</span><button class="btn" data-a="canceledit">Annuler</button></div>`:eo?`<div class="editban">${ic('edit')}<span>Modification de la commande <b>N° ${eo.num} ${esc(eo.name)}</b></span><button class="btn" data-a="canceledit">Annuler</button></div>`:'';
+  const foot=ao?`<div class="sum">Les articles choisis s'ajoutent à la commande de <b>${esc(ao.name)}</b> (N° ${ao.num}) et partent en cuisine marqués « Ajouté ».</div><input class="inp" id="cnote" placeholder="Remarque pour la cuisine" value="${esc(Y.note)}" maxlength="200">
+    <div class="tot"><span>En plus</span><span>${eur(cartTotal(Y))}</span></div><button class="btn p g" data-a="send" ${Y.cart.length&&!Y.sending?'':'disabled'}>${ic('plus')}${Y.sending?'Envoi…':'Ajouter à la commande de '+esc(ao.name)}</button>`:`<div class="seg"><button class="${Y.mode==='sp'?'on':''}" data-a="mode" data-k="sp">Sur place</button><button class="${Y.mode==='emp'?'on':''}" data-a="mode" data-k="emp">À emporter</button></div>
     <input class="inp" id="cname" placeholder="Prénom du client" value="${esc(Y.name)}" autocomplete="off" maxlength="40"><div id="dupw" class="dupw">${dup?dupTxt(dup):''}</div><input class="inp" id="cnote" placeholder="Remarque pour la cuisine" value="${esc(Y.note)}" maxlength="200">
     <div class="tot"><span>Total</span><span>${eur(cartTotal(Y))}</span></div><button class="btn p g" data-a="send" ${Y.cart.length&&!Y.sending?'':'disabled'}>${ic('check')}${Y.sending?'Envoi…':eo?'Enregistrer les modifications':'Envoyer en préparation'}</button>`;
   let h=`${head}<div class="pos">${c?`<div class="prods">${prods}</div>`:catTiles()}
-  <div class="cart"><div class="ch">${ic('bag')}${eo?'Commande N° '+eo.num:'Commande en cours'}</div><div class="cb">${cartLines(Y)}</div><div class="cf">${foot}</div></div></div>`;
+  <div class="cart"><div class="ch">${ic('bag')}${ao?'Ajout · N° '+ao.num:eo?'Commande N° '+eo.num:'Commande en cours'}</div><div class="cb">${cartLines(Y)}</div><div class="cf">${foot}</div></div></div>`;
   h+=`<button class="cbar pbar" data-a="cpanel"><span>${cartCount(Y)?'Panier · '+cartCount(Y)+' article'+(cartCount(Y)>1?'s':''):'Panier vide'}</span><span>${eur(cartTotal(Y))}</span></button>`;
-  if(Y.panel)h+=`<div class="ov" data-a="closepanel"><div class="sheet" data-stop="1" role="dialog" aria-label="Panier"><button class="x" data-a="closepanel" aria-label="Fermer">${ic('x')}</button><div class="c"><h2>${eo?'Commande N° '+eo.num:'Commande en cours'}</h2>${cartLines(Y)}<div style="display:grid;gap:8px;margin-top:12px">${foot}</div><div style="height:6px"></div></div></div></div>`;
+  if(Y.panel)h+=`<div class="ov" data-a="closepanel"><div class="sheet" data-stop="1" role="dialog" aria-label="Panier"><button class="x" data-a="closepanel" aria-label="Fermer">${ic('x')}</button><div class="c"><h2>${ao?'Ajout · N° '+ao.num:eo?'Commande N° '+eo.num:'Commande en cours'}</h2>${cartLines(Y)}<div style="display:grid;gap:8px;margin-top:12px">${foot}</div><div style="height:6px"></div></div></div></div>`;
   return h}
-function dupFind(){const Y=S.caisse,n=Y.name.trim().toLowerCase();if(!n||Y.edit)return null;const lim=Date.now()-30*60e3;return S.orders.filter(o=>!OFF(o.status)&&String(o.name||'').trim().toLowerCase()===n&&o.createdAt>=lim).sort((a,b)=>b.createdAt-a.createdAt)[0]||null}
+function dupFind(){const Y=S.caisse,n=Y.name.trim().toLowerCase();if(!n||Y.edit||Y.add)return null;const lim=Date.now()-30*60e3;return S.orders.filter(o=>!OFF(o.status)&&String(o.name||'').trim().toLowerCase()===n&&o.createdAt>=lim).sort((a,b)=>b.createdAt-a.createdAt)[0]||null}
 const dupTxt=o=>`« ${esc(o.name)} » a déjà une commande il y a ${Math.max(1,Math.round((Date.now()-o.createdAt)/60000))} min (N° ${o.num}). Touchez « Envoyer » une 2e fois pour confirmer.`;
 function tagsHTML(o){return `<span class="tag ${o.origin==='web'?'t-web':'t-cpt'}">${o.origin==='web'?ic('globe','width:13px;height:13px')+'En ligne':'Comptoir'}</span><span class="tag ${o.takeaway?'t-emp':'t-sp'}">${o.takeaway?'À emporter':'Sur place'}</span>${o.arrived&&o.origin==='web'?`<span class="tag t-la">${ic('user','width:13px;height:13px')}Client là ${hm(o.arrived)}</span>`:''}`}
 function cmdHTML(){const Y=S.caisse;const F=[['web','À valider'],['cours','En cours'],['pretes','Prêtes'],['recup','Récupérées'],['annul','Annulées']];
   const test={web:o=>o.status==='web',cours:o=>o.status==='new',pretes:o=>o.status==='ready',recup:o=>o.status==='done',annul:o=>OFF(o.status)};
-  const l=sortO(S.orders.filter(test[Y.filter]));
-  return `<div class="list"><div class="filters">${F.map(([k,n])=>`<button class="${Y.filter===k?'on':''}" data-a="filt" data-k="${k}">${n} (${S.orders.filter(test[k]).length})</button>`).join('')}</div>
+  const q=norm((Y.q||'').trim());const l=sortO(S.orders.filter(q?o=>norm(o.name).includes(q)||String(o.num)===q:test[Y.filter]));
+  return `<div class="list"><div class="srch">${ic('user')}<input class="inp" id="osearch" type="text" enterkeyhint="search" autocomplete="off" placeholder="Rechercher un prénom ou un numéro" value="${esc(Y.q||'')}">${Y.q?`<button class="btn ic" data-a="clrq" aria-label="Effacer la recherche">${ic('x')}</button>`:''}</div>${q?`<div class="sum" style="margin:0 0 10px">${l.length} résultat${l.length>1?'s':''} pour « ${esc(Y.q.trim())} », toutes commandes confondues</div>`:''}<div class="filters" ${q?'style="opacity:.45"':''}>${F.map(([k,n])=>`<button class="${Y.filter===k?'on':''}" data-a="filt" data-k="${k}">${n} (${S.orders.filter(test[k]).length})</button>`).join('')}</div>
   ${l.length?l.map(o=>{const [sc,sl]=STAT[o.status]||['s-done',o.status];const pd=o.status==='new'&&o.pd.length?` <span class="sum">· poste ${o.pd.join(', ')} prêt</span>`:'';let acts='';
     if(o.status==='web')acts=`<button class="btn r" data-a="refuse" data-id="${o.id}">Refuser</button><button class="btn p" data-a="accept" data-id="${o.id}">${ic('check')}Valider</button>`;
-    else if(o.status==='new'||o.status==='ready')acts=`<button class="btn ic" data-a="odel" data-id="${o.id}" aria-label="Supprimer">${ic('trash')}</button>${o.origin==='web'&&!o.arrived?`<button class="btn o" data-a="carrive" data-id="${o.id}">${ic('user')}Client là</button>`:''}<button class="btn" data-a="editord" data-id="${o.id}">${ic('edit')}Modifier</button><button class="btn p" data-a="ost" data-id="${o.id}" data-s="done">${ic('check')}Récupérée</button>`;
+    else if(o.status==='new'||o.status==='ready')acts=`<button class="btn ic" data-a="odel" data-id="${o.id}" aria-label="Supprimer">${ic('trash')}</button>${o.origin==='web'&&!o.arrived?`<button class="btn o" data-a="carrive" data-id="${o.id}">${ic('user')}Client là</button>`:''}<button class="btn" data-a="addto" data-id="${o.id}">${ic('plus')}Ajouter</button><button class="btn" data-a="editord" data-id="${o.id}">${ic('edit')}Modifier</button><button class="btn p" data-a="ost" data-id="${o.id}" data-s="done">${ic('check')}Récupérée</button>`;
     else if(o.status==='refused')acts=`<button class="btn p" data-a="accept" data-id="${o.id}">Accepter quand même</button>`;
     else if(o.status==='deleted')acts=`<button class="btn" data-a="ost" data-id="${o.id}" data-s="new">${ic('undo')}Restaurer</button>`;
     else if(o.status==='done')acts=`<button class="btn" data-a="ost" data-id="${o.id}" data-s="new">${ic('undo')}Remettre en cours</button>`;
     const tot=o.status==='web'||o.status==='refused'?o.items.reduce((a,l)=>{const {c,it}=findIt(l.cn,l.inm);return a+(it&&l.sel?unit(c,it,l.sel):l.unit)*l.qty},0):o.total;
     return `<div class="oc ${o.arrived&&o.origin==='web'&&o.status!=='done'?'la':''}"><div class="h"><span><span class="no">N° ${o.num}</span> <b>${esc(o.name)}</b> <span style="color:var(--gris)">${hm(o.createdAt)}</span></span><span style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${tagsHTML(o)}<span class="st ${sc}">${sl}</span>${pd}</span></div>
-    <div class="b">${o.items.map((it,k)=>`<div style="${isGiven(o,k)?'opacity:.55':''}"><div class="it"><b>${it.qty} × ${esc(it.name)}${isGiven(o,k)?' · donnée':''}</b><span>${eur(it.unit*it.qty)}</span></div>${sumHTML(it)}</div>`).join('')}${o.note?`<div class="rq"><b>Remarque</b>${esc(o.note)}</div>`:''}</div>
+    <div class="b">${o.items.map((it,k)=>`<div style="${isGiven(o,k)?'opacity:.55':''}"><div class="it"><b>${it.qty} × ${esc(it.name)}${isGiven(o,k)?' · donnée':''}${it.add?' <span class="tag t-add">Ajouté</span>':''}</b><span>${eur(it.unit*it.qty)}</span></div>${sumHTML(it)}</div>`).join('')}${o.note?`<div class="rq"><b>Remarque</b>${esc(o.note)}</div>`:''}</div>
     <div class="f"><b style="font-size:16px">${eur(tot)}</b><span class="acts">${acts}</span></div></div>`}).join(''):`<div class="empty">Aucune commande ici</div>`}</div>`}
 async function sha(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('zette:'+s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return 'p:'+s}}
 function ventesHTML(){const Y=S.caisse;
@@ -500,7 +505,7 @@ const hidMap=()=>LS.get(hidKey,{});
 const isHidden=o=>{const h=hidMap();return h[o.id]!==undefined&&h[o.id]===(o.rev||0)};
 function ktagsHTML(o){const t=[];if(o.arrived&&o.origin==='web')t.push(`<span class="tag t-la">${ic('user','width:13px;height:13px')}Client là ${hm(o.arrived)}</span>`);if(o.takeaway)t.push(`<span class="tag t-emp big">${ic('bag','width:16px;height:16px')}À EMPORTER</span>`);if(o.origin==='web')t.push(`<span class="tag t-web">${ic('globe','width:13px;height:13px')}En ligne</span>`);if(o.rev)t.push(`<span class="tag t-mod">Modifiée${o.updatedAt?' '+hm(o.updatedAt):''}</span>`);return t.join('')}
 function cuisineHTML(){const K=S.cuisine,P=STATION;
-  const vis=(o,l,k)=>{if(isGiven(o,k))return false;const st=itemSt(o,l);return P===''?st.length>0:st.includes(P)};
+  const vis=(o,l,k)=>{if(isGiven(o,k))return false;const st=itemSt(o,l);if(P==='2'&&st.includes('3')&&(o.status==='ready'||o.pd.includes('3')))return false;return P===''?st.length>0:st.includes(P)};
   const doneHere=o=>o.status==='ready'||(P!==''&&o.pd.includes(P));
   const active=sortO(S.orders.filter(o=>(o.status==='new'||o.status==='ready')&&o.items.some((l,k)=>vis(o,l,k))));
   const cours=active.filter(o=>!isHidden(o)),ret=active.filter(isHidden);const L2=K.tab==='cours'?cours:ret;
@@ -508,7 +513,7 @@ function cuisineHTML(){const K=S.cuisine,P=STATION;
   h+=`<div class="kd">${L2.length?L2.map(o=>{const its=o.items.map((l,k)=>[l,k]).filter(([l,k])=>vis(o,l,k));const rdy=doneHere(o);const kt=ktagsHTML(o);
     return `<div class="tk ${o.arrived&&o.origin==='web'?'la':''} ${rdy?'rdy':''}"><div class="th"><span><span class="no">N° ${o.num}</span> <b>${esc(o.name)}</b></span><span style="color:var(--gris);font-size:13px">${Math.max(1,Math.round((Date.now()-o.createdAt)/60000))} min</span></div>
     ${kt?`<div class="tags">${kt}</div>`:''}
-    ${its.map(([l,k])=>{const r=(l.rub||[]).filter(x=>x[0]!=='drink');return `<div class="art ${l.chg?'chg':''}"><div class="t"><span>${esc(l.kn||l.name)}</span><span class="qx">×${l.qty}</span>${l.chg?'<span class="tag t-mod">Modifié</span>':''}${isFr(l)&&K.tab==='cours'&&!rdy?`<button class="btn give" data-a="give" data-id="${o.id}" data-i="${k}">${ic('check','width:14px;height:14px')}Donnée</button>`:''}</div>
+    ${its.map(([l,k])=>{const r=(l.rub||[]).filter(x=>x[0]!=='drink');return `<div class="art ${l.chg?'chg':''}"><div class="t"><span>${esc(l.kn||l.name)}</span><span class="qx">×${l.qty}</span>${l.add&&l.chg?'<span class="tag t-add">Ajouté</span>':l.chg?'<span class="tag t-mod">Modifié</span>':''}${isFr(l)&&K.tab==='cours'&&!rdy?`<button class="btn give" data-a="give" data-id="${o.id}" data-i="${k}">${ic('check','width:14px;height:14px')}Donnée</button>`:''}</div>
       ${r.map(([kk,lab,v])=>`<dl class="rub ${kk==='sup'?'sup':kk==='ret'?'ret':''}">${v.map((x,i)=>`<dt>${i?'':esc(lab)}</dt><dd>${esc(x)}</dd>`).join('')}</dl>`).join('')}${!l.rub&&l.detail?`<div class="sum">${esc(l.detail)}</div>`:''}${l.sel&&l.sel.note?`<div class="rq"><b>Remarque</b>${esc(l.sel.note)}</div>`:''}</div>`}).join('')}
     ${o.note?`<div class="art"><div class="rq" style="margin:0"><b>Remarque de la commande</b>${esc(o.note)}</div></div>`:''}
     <div class="tf"><span class="sum">${rdy?'<span class="st s-ready">Prête</span>':hm(o.createdAt)}</span>${K.tab==='ret'?`<button class="btn" data-a="kshow" data-id="${o.id}">${ic('undo')}Remettre sur cet écran</button>`:rdy?`<button class="btn" data-a="khide" data-id="${o.id}">${ic('x')}Retirer de cet écran</button>`:`<button class="btn p" data-a="kready" data-id="${o.id}">${ic('check')}Prête</button>`}</div></div>`}).join(''):`<div class="empty" style="grid-column:1/-1">${K.tab==='cours'?'Rien à préparer pour l\'instant':'Aucune commande retirée de cet écran'}</div>`}</div>`;
@@ -537,7 +542,7 @@ function onData(d){if(d.cfg)setCfg(d.cfg);if(d.photos)S.photos={...d.photos};if(
   if(d.orders){S.orders=d.orders.map(o=>{const x=parseSt(o.status);return {...o,raw:o.status,status:x.base,pd:x.pd,gv:x.gv,createdAt:Date.parse(o.created_at||o.createdAt)||Date.now(),updatedAt:o.updated_at?Date.parse(o.updated_at):null,arrived:o.arrived?Date.parse(o.arrived):null,origin:o.origin||((o.token||'')?'web':'cpt'),items:(o.items||[]).map(l=>({...l,qty:+l.qty||1,unit:+(l.unit!=null?l.unit:l.price)||0}))}});
     if(MODE==='caisse'){const web=S.orders.filter(o=>o.status==='web').map(o=>o.id);if(S.seenWeb&&web.some(id=>!S.seenWeb.includes(id)))beep(2);S.seenWeb=web}}
   S.ready=true;
-  const busy=(MODE!=='cuisine'&&X().sheet)||['INPUT','TEXTAREA'].includes((document.activeElement||{}).tagName);
+  const ae0=document.activeElement||{};const busy=(MODE!=='cuisine'&&X().sheet)||(['INPUT','TEXTAREA'].includes(ae0.tagName)&&ae0.id!=='osearch');
   if(busy&&MODE==='caisse'&&S.caisse.tab!=='reg'){const b=$('.bans');if(b)b.innerHTML=bannersHTML();return}
   if(busy&&MODE!=='caisse')return;
   if(MODE==='caisse'&&S.caisse.tab==='reg'&&['INPUT','TEXTAREA'].includes((document.activeElement||{}).tagName))return;
@@ -547,7 +552,7 @@ function onData(d){if(d.cfg)setCfg(d.cfg);if(d.photos)S.photos={...d.photos};if(
 document.addEventListener('input',e=>{const t=e.target,Y=X();
   if(t.id==='inote'&&Y.sheet)Y.sheet.sel.note=t.value;else if(t.id==='tlabel'&&Y.sheet)Y.sheet.sel.label=t.value;
   else if(t.id==='cname'){Y.name=t.value;if(MODE==='caisse'){S.caisse.dupAck='';const w=$('#dupw');const d=dupFind();if(w)w.innerHTML=d?dupTxt(d):''}}
-  else if(t.id==='cnote')Y.note=t.value;else if(t.id==='pin')S.caisse.pin=t.value});
+  else if(t.id==='cnote')Y.note=t.value;else if(t.id==='pin')S.caisse.pin=t.value;else if(t.id==='osearch'){S.caisse.q=t.value;draw()}});
 document.addEventListener('change',async e=>{const t=e.target;if(t.type==='file'&&t.files&&t.files[0]&&B.savePhoto){const n=t.dataset.n,f=t.files[0];
   try{toast('Enregistrement de la photo…');const url=URL.createObjectURL(f);const img=new Image();await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=url});const M=640,k=Math.min(1,M/Math.max(img.width,img.height));const cv=document.createElement('canvas');cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(url);
     const d=cv.toDataURL('image/jpeg',.78);await B.savePhoto(n,d);S.photos[n]=d;toast('Photo enregistrée')}catch(err){fail(err)}}});
@@ -593,9 +598,21 @@ async function go(a,t){const Y=X(),d=t.dataset;
   case 'cback':S.caisse.cat=null;break;
   case 'mode':S.caisse.mode=d.k;break;
   case 'gotoweb':S.caisse.tab='cmd';S.caisse.filter='web';break;
-  case 'filt':S.caisse.filter=d.k;break;
+  case 'filt':S.caisse.filter=d.k;S.caisse.q='';break;
+  case 'clrq':S.caisse.q='';break;
   case 'runseen':LS.set('zette_runseen',d.k);break;
-  case 'send':{const C=S.caisse;if(!C.cart.length||C.sending)return;if(!C.name.trim()){toast('Entrez le prénom du client');const i=$('#cname');if(i)i.focus();return}
+  case 'send':{const C=S.caisse;if(!C.cart.length||C.sending)return;
+    if(C.add){const o=byId(C.add);if(!o){toast('Commande introuvable');leaveEdit();break}
+      const now=new Date().toISOString();const add=cleanItems(C.cart).map(l=>({...l,add:true,chg:true}));
+      const items=o.items.map(l=>({...l,chg:false})).concat(add);
+      // les postes qui n'ont rien de nouveau gardent leur « prête »
+      const x=parseSt(o.raw||o.status);const no={...o,items,gv:x.gv};const nst=new Set(add.flatMap((l,i)=>itemSt(no,l)));
+      let pd=x.base==='ready'?[...needSt(o)]:x.pd;pd=pd.filter(y=>!nst.has(y));
+      const addNote=C.note.trim();const note=addNote?((o.note?o.note+' · ':'')+'Ajout : '+addNote):o.note;
+      C.sending=true;draw();
+      try{await B.update(o.id,{items,total:Math.round(((+o.total||0)+cartTotal(C))*100)/100,note,rev:(o.rev||0)+1,updated_at:now,status:fmtSt({base:'new',pd,gv:x.gv})});leaveEdit();C.tab='cmd';C.filter='cours';C.cat=null;toast('Ajouté à la commande de '+o.name)}catch(err){fail(err)}
+      C.sending=false;break}
+    if(!C.name.trim()){toast('Entrez le prénom du client');const i=$('#cname');if(i)i.focus();return}
     const items=cleanItems(C.cart),total=cartTotal(C);
     if(C.edit){const o=byId(C.edit);if(!o){toast('Commande introuvable');C.edit=null;break}
       const key=l=>JSON.stringify([l.name,l.sel,l.qty]);const before=new Set(o.items.map(key));const its=items.map(l=>before.has(key(l))?{...l,chg:false}:{...l,chg:true});
@@ -607,9 +624,10 @@ async function go(a,t){const Y=X(),d=t.dataset;
     C.sending=true;draw();
     try{await B.send({day:getDay(),name:C.name.trim(),items,total,note:C.note.trim(),takeaway:C.mode==='emp',origin:'cpt',status:'new'});C.cart=[];C.name='';C.note='';C.mode='sp';C.panel=false;C.dupAck='';C.cat=null;toast('Commande envoyée en préparation')}catch(err){fail(err);toast('Pas envoyée : vérifiez la connexion puis réessayez. Le panier est gardé.')}
     C.sending=false;break}
-  case 'editord':{const o=byId(d.id);if(!o)return;const C=S.caisse;if(!C.edit)C.held={cart:C.cart,name:C.name,note:C.note,mode:C.mode};
+  case 'editord':{const o=byId(d.id);if(!o)return;const C=S.caisse;C.add=null;if(!C.edit)C.held={cart:C.cart,name:C.name,note:C.note,mode:C.mode};
     C.edit=o.id;C.cart=o.items.map((l,k)=>({...l,gv:isGiven(o,k)||undefined}));C.name=o.name;C.note=o.note||'';C.mode=o.takeaway?'emp':'sp';C.tab='prise';C.cat=null;break}
   case 'canceledit':leaveEdit();break;
+  case 'addto':{const o=byId(d.id);if(!o)return;const C=S.caisse;if(!C.edit&&!C.add)C.held={cart:C.cart,name:C.name,note:C.note,mode:C.mode};C.edit=null;C.add=o.id;C.cart=[];C.note='';C.tab='prise';C.cat=null;C.panel=false;break}
   case 'ost':{const o=byId(d.id);try{await B.status(d.id,fmtSt({base:d.s,pd:[],gv:(o&&o.gv)||[]}));toast({new:'Commande remise en cours',done:'Commande récupérée'}[d.s]||'C\'est fait')}catch(err){fail(err)}return}
   case 'accept':{const o=byId(d.id);if(!o)return;const items=o.items.map(l=>{const {c,it}=findIt(l.cn,l.inm);if(!it||!l.sel)return l;const u=unit(c,it,l.sel);return {...l,unit:u,rub:rubrics(c,it,l.sel)}});const total=items.reduce((a,l)=>a+l.unit*l.qty,0);
     try{await B.update(o.id,{items,total,status:'new'});toast('Commande N° '+o.num+' envoyée en préparation')}catch(err){fail(err)}return}
@@ -636,7 +654,7 @@ async function go(a,t){const Y=X(),d=t.dataset;
       await B.status(o.id,fmtSt(x));toast('Remise sur cet écran : à refaire')}catch(err){fail(err)}return}
   }
   draw()}
-function leaveEdit(){const C=S.caisse;C.edit=null;if(C.held){C.cart=C.held.cart;C.name=C.held.name;C.note=C.held.note;C.mode=C.held.mode;C.held=null}else{C.cart=[];C.name='';C.note='';C.mode='sp'}}
+function leaveEdit(){const C=S.caisse;C.edit=null;C.add=null;if(C.held){C.cart=C.held.cart;C.name=C.held.name;C.note=C.held.note;C.mode=C.held.mode;C.held=null}else{C.cart=[];C.name='';C.note='';C.mode='sp'}}
 setInterval(()=>{if(MODE==='caisse'&&S.ready){const b=$('.bans');if(b)b.innerHTML=bannersHTML()}},30000);
 
 /* ====================== DÉMARRAGE ====================== */
